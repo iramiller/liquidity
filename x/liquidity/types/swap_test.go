@@ -15,7 +15,7 @@ import (
 
 func TestSwapScenario(t *testing.T) {
 	// init test app and context
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -65,7 +65,7 @@ func TestSwapScenario(t *testing.T) {
 	// Generate an orderbook by arranging swap messages in order price
 	orderMap, xToY, yToX := types.MakeOrderMap(msgs, denomX, denomY, false)
 	orderBook := orderMap.SortOrderBook()
-	currentPrice := X.Quo(Y).ToDec()
+	currentPrice := sdk.NewDecFromInt(X.Quo(Y))
 	require.Equal(t, orderMap[xOrderPrices[0].String()].BuyOfferAmt, xOfferCoins[0].Amount.MulRaw(3))
 	require.Equal(t, orderMap[xOrderPrices[0].String()].Price, xOrderPrices[0])
 
@@ -86,7 +86,7 @@ func TestSwapScenario(t *testing.T) {
 
 	// The price and coins of swap messages in orderbook are calculated
 	// to derive match result with the price direction.
-	result, found := orderBook.Match(X.ToDec(), Y.ToDec())
+	result, found := orderBook.Match(sdk.NewDecFromInt(X), sdk.NewDecFromInt(Y))
 	require.True(t, found)
 	require.NotEqual(t, types.NoMatch, result.MatchType)
 
@@ -96,7 +96,7 @@ func TestSwapScenario(t *testing.T) {
 		result.SwapPrice, ctx.BlockHeight())
 
 	xToY, yToX, XDec, YDec, poolXDelta2, poolYDelta2 :=
-		types.UpdateSwapMsgStates(X.ToDec(), Y.ToDec(), xToY, yToX, matchResultXtoY, matchResultYtoX)
+		types.UpdateSwapMsgStates(sdk.NewDecFromInt(X), sdk.NewDecFromInt(Y), xToY, yToX, matchResultXtoY, matchResultYtoX)
 
 	require.Equal(t, 0, types.CountNotMatchedMsgs(xToY))
 	require.Equal(t, 0, types.CountFractionalMatchedMsgs(xToY))
@@ -173,7 +173,7 @@ func TestSwapScenario(t *testing.T) {
 }
 
 func TestMaxOrderRatio(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -231,8 +231,8 @@ func TestMaxOrderRatio(t *testing.T) {
 	require.Equal(t, types.ErrExceededMaxOrderable, err)
 
 	// Success case, same GetMaxOrderRatio orders
-	offerCoin = sdk.NewCoin(denomX, X.ToDec().Mul(maxOrderRatio).TruncateInt())
-	offerCoinY = sdk.NewCoin(denomY, Y.ToDec().Mul(maxOrderRatio).TruncateInt())
+	offerCoin = sdk.NewCoin(denomX, sdk.NewDecFromInt(X).Mul(maxOrderRatio).TruncateInt())
+	offerCoinY = sdk.NewCoin(denomY, sdk.NewDecFromInt(Y).Mul(maxOrderRatio).TruncateInt())
 
 	app.SaveAccountWithFee(simapp, ctx, addrs[1], sdk.NewCoins(offerCoin), offerCoin)
 	app.SaveAccountWithFee(simapp, ctx, addrs[2], sdk.NewCoins(offerCoinY), offerCoinY)
@@ -247,8 +247,8 @@ func TestMaxOrderRatio(t *testing.T) {
 	require.NoError(t, err)
 
 	// Success case, same GetMaxOrderRatio orders
-	offerCoin = sdk.NewCoin(denomX, X.ToDec().Mul(maxOrderRatio).TruncateInt().AddRaw(1))
-	offerCoinY = sdk.NewCoin(denomY, Y.ToDec().Mul(maxOrderRatio).TruncateInt().AddRaw(1))
+	offerCoin = sdk.NewCoin(denomX, sdk.NewDecFromInt(X).Mul(maxOrderRatio).TruncateInt().AddRaw(1))
+	offerCoinY = sdk.NewCoin(denomY, sdk.NewDecFromInt(Y).Mul(maxOrderRatio).TruncateInt().AddRaw(1))
 
 	offerCoin = sdk.NewCoin(denomX, params.MinInitDepositAmount.Quo(sdk.NewInt(2)))
 	offerCoinY = sdk.NewCoin(denomY, params.MinInitDepositAmount.Quo(sdk.NewInt(10)))
@@ -434,8 +434,8 @@ func TestComputePriceDirection(t *testing.T) {
 	// make orderbook to sort orderMap
 	orderBook := orderMap.SortOrderBook()
 
-	X := orderMap[a.String()].BuyOfferAmt.ToDec().Add(orderMap[b.String()].BuyOfferAmt.ToDec())
-	Y := orderMap[c.String()].SellOfferAmt.ToDec()
+	X := sdk.NewDecFromInt(orderMap[a.String()].BuyOfferAmt).Add(sdk.NewDecFromInt(orderMap[b.String()].BuyOfferAmt))
+	Y := sdk.NewDecFromInt(orderMap[c.String()].SellOfferAmt)
 
 	poolPrice := X.Quo(Y)
 	direction := orderBook.PriceDirection(poolPrice)
@@ -467,8 +467,8 @@ func TestComputePriceDirection(t *testing.T) {
 	// make orderbook to sort orderMap
 	orderBook = orderMap.SortOrderBook()
 
-	X = orderMap[a.String()].BuyOfferAmt.ToDec().Add(orderMap[c.String()].BuyOfferAmt.ToDec())
-	Y = orderMap[b.String()].SellOfferAmt.ToDec()
+	X = sdk.NewDecFromInt(orderMap[a.String()].BuyOfferAmt).Add(sdk.NewDecFromInt(orderMap[c.String()].BuyOfferAmt))
+	Y = sdk.NewDecFromInt(orderMap[b.String()].SellOfferAmt)
 
 	poolPrice = X.Quo(Y)
 	direction = orderBook.PriceDirection(poolPrice)
@@ -488,8 +488,8 @@ func TestComputePriceDirection(t *testing.T) {
 	}
 	orderBook = orderMap.SortOrderBook()
 
-	X = orderMap[a.String()].BuyOfferAmt.ToDec()
-	Y = orderMap[a.String()].SellOfferAmt.ToDec()
+	X = sdk.NewDecFromInt(orderMap[a.String()].BuyOfferAmt)
+	Y = sdk.NewDecFromInt(orderMap[a.String()].SellOfferAmt)
 	poolPrice = X.Quo(Y)
 
 	result, _ = orderBook.Match(X, Y)

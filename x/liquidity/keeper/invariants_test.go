@@ -78,7 +78,7 @@ func TestMintingPoolCoinsInvariant(t *testing.T) {
 }
 
 func TestLiquidityPoolsEscrowAmountInvariant(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 
 	// define test denom X, Y for Liquidity Pool
 	denomX, denomY := types.AlphabeticalDenomPair(DenomX, DenomY)

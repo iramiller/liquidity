@@ -15,7 +15,7 @@ import (
 )
 
 func TestBadMsg(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	handler := liquidity.NewHandler(simapp.LiquidityKeeper)
 	_, err := handler(ctx, nil)
@@ -25,7 +25,7 @@ func TestBadMsg(t *testing.T) {
 }
 
 func TestMsgServerCreatePool(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -67,7 +67,7 @@ func TestMsgServerCreatePool(t *testing.T) {
 }
 
 func TestMsgServerExecuteDeposit(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -124,7 +124,7 @@ func TestMsgServerExecuteDeposit(t *testing.T) {
 }
 
 func TestMsgServerExecuteWithdrawal(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -183,7 +183,7 @@ func TestMsgServerExecuteWithdrawal(t *testing.T) {
 }
 
 func TestMsgServerGetLiquidityPoolMetadata(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -236,7 +236,7 @@ func TestMsgServerGetLiquidityPoolMetadata(t *testing.T) {
 }
 
 func TestMsgServerSwap(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 	// init test app and context

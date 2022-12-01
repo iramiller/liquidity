@@ -1,6 +1,3 @@
-//go:build norace
-// +build norace
-
 package cli_test
 
 import (
@@ -29,7 +26,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 	genutiltest "github.com/cosmos/cosmos-sdk/x/genutil/client/testutil"
-	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	govtypesv1beta1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1beta1"
 	paramscutils "github.com/cosmos/cosmos-sdk/x/params/client/utils"
 
 	lapp "github.com/tendermint/liquidity/app"
@@ -76,16 +73,16 @@ func (s *IntegrationTestSuite) SetupTest() {
 	cfg.AccountTokens = sdk.NewInt(100_000_000_000) // node0token denom
 	cfg.StakingTokens = sdk.NewInt(100_000_000_000) // stake denom
 
-	genesisStateGov := govtypes.DefaultGenesisState()
-	genesisStateGov.DepositParams = govtypes.NewDepositParams(sdk.NewCoins(sdk.NewCoin(cfg.BondDenom, govtypes.DefaultMinDepositTokens)), time.Duration(15)*time.Second)
-	genesisStateGov.VotingParams = govtypes.NewVotingParams(time.Duration(3) * time.Second)
+	var genesisStateGov govtypesv1beta1.GenesisState
+	genesisStateGov.DepositParams = govtypesv1beta1.NewDepositParams(sdk.NewCoins(sdk.NewCoin(cfg.BondDenom, govtypesv1beta1.DefaultMinDepositTokens)), time.Duration(15)*time.Second)
+	genesisStateGov.VotingParams = govtypesv1beta1.NewVotingParams(time.Duration(3) * time.Second)
 	genesisStateGov.TallyParams.Quorum = sdk.MustNewDecFromStr("0.01")
-	bz, err := cfg.Codec.MarshalJSON(genesisStateGov)
+	bz, err := cfg.LegacyAmino.MarshalJSON(genesisStateGov)
 	s.Require().NoError(err)
 	cfg.GenesisState["gov"] = bz
 
 	s.cfg = cfg
-	s.network = network.New(s.T(), s.cfg)
+	s.network, _ = network.New(s.T(), s.T().TempDir(), s.cfg)
 	s.db = db
 
 	_, err = s.network.WaitForHeight(1)
@@ -1266,7 +1263,7 @@ func (s *IntegrationTestSuite) TestGetCircuitBreaker() {
 			Value:    circuitBreakerEnabledStr,
 		},
 		},
-		Deposit: sdk.NewCoin(s.cfg.BondDenom, govtypes.DefaultMinDepositTokens).String(),
+		Deposit: sdk.NewCoin(s.cfg.BondDenom, govtypesv1beta1.DefaultMinDepositTokens).String(),
 	}
 	paramChangeProp, err := json.Marshal(&paramChange)
 	if err != nil {

@@ -28,7 +28,7 @@ type KeeperTestSuite struct {
 }
 
 func (suite *KeeperTestSuite) SetupTest() {
-	app, ctx := createTestInput()
+	app, ctx := createTestInput(suite.T())
 
 	querier := keeper.Querier{Keeper: app.LiquidityKeeper}
 
@@ -49,7 +49,7 @@ func TestKeeperTestSuite(t *testing.T) {
 }
 
 func TestCircuitBreakerEnabled(t *testing.T) {
-	app, ctx := createTestInput()
+	app, ctx := createTestInput(t)
 
 	enabled := app.LiquidityKeeper.GetCircuitBreakerEnabled(ctx)
 	require.Equal(t, false, enabled)

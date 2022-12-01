@@ -16,7 +16,7 @@ import (
 func TestGenesisState(t *testing.T) {
 	cdc := codec.NewLegacyAmino()
 	types.RegisterLegacyAminoCodec(cdc)
-	simapp := app.Setup(false)
+	simapp := app.Setup(t)
 
 	ctx := simapp.BaseApp.NewContext(false, tmproto.Header{})
 	genesis := types.DefaultGenesisState()
@@ -59,7 +59,7 @@ func TestGenesisState(t *testing.T) {
 	genesisExported := liquidity.ExportGenesis(ctx, simapp.LiquidityKeeper)
 	bankGenesisExported := simapp.BankKeeper.ExportGenesis(ctx)
 
-	simapp2 := app.Setup(false)
+	simapp2 := app.Setup(t)
 
 	ctx2 := simapp2.BaseApp.NewContext(false, tmproto.Header{})
 	ctx2 = ctx2.WithBlockHeight(1)

@@ -15,7 +15,7 @@ import (
 func TestParams(t *testing.T) {
 	require.IsType(t, paramstypes.KeyTable{}, types.ParamKeyTable())
 
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	defaultParams := types.DefaultParams()
 	require.Equal(t, defaultParams, simapp.LiquidityKeeper.GetParams(ctx))
 

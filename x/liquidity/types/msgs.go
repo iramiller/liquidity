@@ -13,10 +13,10 @@ var (
 
 // Message types for the liquidity module
 const (
-	TypeMsgCreatePool          = "create_pool"
+	TypeMsgCreatePool          = "create_pool" // #nosec G101
 	TypeMsgDepositWithinBatch  = "deposit_within_batch"
 	TypeMsgWithdrawWithinBatch = "withdraw_within_batch"
-	TypeMsgSwapWithinBatch     = "swap_within_batch"
+	TypeMsgSwapWithinBatch     = "swap_within_batch" // #nosec G101
 )
 
 // NewMsgCreatePool creates a new MsgCreatePool.

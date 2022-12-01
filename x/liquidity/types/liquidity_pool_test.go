@@ -40,7 +40,7 @@ func TestUnmarshalerPanics(t *testing.T) {
 }
 
 func TestLiquidityPoolBatch(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
 	pool := types.Pool{}

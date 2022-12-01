@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 
+	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	"gopkg.in/yaml.v2"
@@ -161,7 +162,7 @@ func validatePoolTypes(i interface{}) error {
 }
 
 func validateMinInitDepositAmount(i interface{}) error {
-	v, ok := i.(sdk.Int)
+	v, ok := i.(sdkmath.Int)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
@@ -178,7 +179,7 @@ func validateMinInitDepositAmount(i interface{}) error {
 }
 
 func validateInitPoolCoinMintAmount(i interface{}) error {
-	v, ok := i.(sdk.Int)
+	v, ok := i.(sdkmath.Int)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
@@ -199,7 +200,7 @@ func validateInitPoolCoinMintAmount(i interface{}) error {
 }
 
 func validateMaxReserveCoinAmount(i interface{}) error {
-	v, ok := i.(sdk.Int)
+	v, ok := i.(sdkmath.Int)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}

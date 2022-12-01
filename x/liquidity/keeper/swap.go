@@ -70,8 +70,8 @@ func (k Keeper) SwapExecution(ctx sdk.Context, poolBatch types.PoolBatch) (uint6
 	// get reserve coins from the liquidity pool and calculate the current pool price (p = x / y)
 	reserveCoins := k.GetReserveCoins(ctx, pool)
 
-	X := reserveCoins[0].Amount.ToDec()
-	Y := reserveCoins[1].Amount.ToDec()
+	X := sdk.NewDecFromInt(reserveCoins[0].Amount)
+	Y := sdk.NewDecFromInt(reserveCoins[1].Amount)
 	currentPoolPrice := X.Quo(Y)
 	denomX := reserveCoins[0].Denom
 	denomY := reserveCoins[1].Denom

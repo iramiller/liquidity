@@ -12,17 +12,29 @@ import (
 	"testing"
 	"time"
 
+	sdkmath "cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	servertypes "github.com/cosmos/cosmos-sdk/server/types"
+	"github.com/cosmos/cosmos-sdk/testutil/mock"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/stretchr/testify/require"
+
 	abci "github.com/tendermint/tendermint/abci/types"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 	dbm "github.com/tendermint/tm-db"
 
+	"github.com/tendermint/liquidity/app/params"
 	"github.com/tendermint/liquidity/x/liquidity"
 	"github.com/tendermint/liquidity/x/liquidity/keeper"
 	"github.com/tendermint/liquidity/x/liquidity/types"
@@ -46,25 +58,55 @@ var DefaultConsensusParams = &abci.ConsensusParams{
 	},
 }
 
-func setup(withGenesis bool, invCheckPeriod uint) (*LiquidityApp, GenesisState) {
+// SetupOptions defines arguments that are passed into `Simapp` constructor.
+type SetupOptions struct {
+	Logger             log.Logger
+	DB                 *dbm.MemDB
+	InvCheckPeriod     uint
+	HomePath           string
+	SkipUpgradeHeights map[int64]bool
+	EncConfig          params.EncodingConfig
+	AppOpts            servertypes.AppOptions
+	ChainID            string
+}
+
+func setup(t *testing.T, withGenesis bool, invCheckPeriod uint) (*LiquidityApp, GenesisState) {
 	db := dbm.NewMemDB()
 	encCdc := MakeEncodingConfig()
-	app := NewLiquidityApp(log.NewNopLogger(), db, nil, true, map[int64]bool{}, DefaultNodeHome, invCheckPeriod, encCdc, EmptyAppOptions{})
+	app := NewLiquidityApp(log.NewNopLogger(), db, nil, true, map[int64]bool{}, t.TempDir(), invCheckPeriod, encCdc, EmptyAppOptions{})
 	if withGenesis {
-		return app, NewDefaultGenesisState()
+		return app, NewDefaultGenesisState(encCdc.Marshaler)
 	}
 	return app, GenesisState{}
 }
 
-// Setup initializes a new LiquidityApp. A Nop logger is set in LiquidityApp.
-func Setup(isCheckTx bool) *LiquidityApp {
-	app, genesisState := setup(!isCheckTx, 5)
+// NewAppWithCustomOptions initializes a new SimApp with custom options.
+func NewAppWithCustomOptions(t *testing.T, isCheckTx bool, options SetupOptions) *LiquidityApp {
+	t.Helper()
+
+	privVal := mock.NewPV()
+	pubKey, err := privVal.GetPubKey()
+	require.NoError(t, err)
+	// create validator set with single validator
+	validator := tmtypes.NewValidator(pubKey, 1)
+	valSet := tmtypes.NewValidatorSet([]*tmtypes.Validator{validator})
+
+	// generate genesis account
+	senderPrivKey := secp256k1.GenPrivKey()
+	acc := authtypes.NewBaseAccount(senderPrivKey.PubKey().Address().Bytes(), senderPrivKey.PubKey(), 0, 0)
+	balance := banktypes.Balance{
+		Address: acc.GetAddress().String(),
+		Coins:   sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, sdk.NewInt(100000000000000))),
+	}
+
+	app := NewLiquidityApp(options.Logger, options.DB, nil, true, options.SkipUpgradeHeights, options.HomePath, options.InvCheckPeriod, options.EncConfig, options.AppOpts)
+	genesisState := NewDefaultGenesisState(app.appCodec)
+	genesisState = genesisStateWithValSet(t, app, genesisState, valSet, []authtypes.GenesisAccount{acc}, balance)
+
 	if !isCheckTx {
 		// init chain must be called to stop deliverState from being nil
-		stateBytes, err := json.MarshalIndent(genesisState, "", " ")
-		if err != nil {
-			panic(err)
-		}
+		stateBytes, err := tmjson.MarshalIndent(genesisState, "", " ")
+		require.NoError(t, err)
 
 		// Initialize the chain
 		app.InitChain(
@@ -72,9 +114,134 @@ func Setup(isCheckTx bool) *LiquidityApp {
 				Validators:      []abci.ValidatorUpdate{},
 				ConsensusParams: DefaultConsensusParams,
 				AppStateBytes:   stateBytes,
+				ChainId:         options.ChainID,
 			},
 		)
 	}
+
+	return app
+}
+
+func genesisStateWithValSet(t *testing.T,
+	app *LiquidityApp, genesisState GenesisState,
+	valSet *tmtypes.ValidatorSet, genAccs []authtypes.GenesisAccount,
+	balances ...banktypes.Balance,
+) GenesisState {
+	// set genesis accounts
+	authGenesis := authtypes.NewGenesisState(authtypes.DefaultParams(), genAccs)
+	genesisState[authtypes.ModuleName] = app.AppCodec().MustMarshalJSON(authGenesis)
+
+	validators := make([]stakingtypes.Validator, 0, len(valSet.Validators))
+	delegations := make([]stakingtypes.Delegation, 0, len(valSet.Validators))
+
+	bondAmt := sdk.DefaultPowerReduction
+
+	for _, val := range valSet.Validators {
+		pk, err := cryptocodec.FromTmPubKeyInterface(val.PubKey)
+		require.NoError(t, err)
+		pkAny, err := codectypes.NewAnyWithValue(pk)
+		require.NoError(t, err)
+		validator := stakingtypes.Validator{
+			OperatorAddress:   sdk.ValAddress(val.Address).String(),
+			ConsensusPubkey:   pkAny,
+			Jailed:            false,
+			Status:            stakingtypes.Bonded,
+			Tokens:            bondAmt,
+			DelegatorShares:   sdk.OneDec(),
+			Description:       stakingtypes.Description{},
+			UnbondingHeight:   int64(0),
+			UnbondingTime:     time.Unix(0, 0).UTC(),
+			Commission:        stakingtypes.NewCommission(sdk.ZeroDec(), sdk.ZeroDec(), sdk.ZeroDec()),
+			MinSelfDelegation: sdk.ZeroInt(),
+		}
+		validators = append(validators, validator)
+		delegations = append(delegations, stakingtypes.NewDelegation(genAccs[0].GetAddress(), val.Address.Bytes(), sdk.OneDec()))
+	}
+
+	// set validators and delegations
+	stakingGenesis := stakingtypes.NewGenesisState(stakingtypes.DefaultParams(), validators, delegations)
+	genesisState[stakingtypes.ModuleName] = app.AppCodec().MustMarshalJSON(stakingGenesis)
+
+	totalSupply := sdk.NewCoins()
+	for _, b := range balances {
+		// add genesis acc tokens to total supply
+		totalSupply = totalSupply.Add(b.Coins...)
+	}
+
+	if len(delegations) > 0 {
+		bondCoins := sdk.NewCoin(sdk.DefaultBondDenom, bondAmt.Mul(sdk.NewInt(int64(len(delegations)))))
+		// add delegated tokens to total supply
+		totalSupply = totalSupply.Add(bondCoins)
+		// add bonded amount to bonded pool module account
+		balances = append(balances, banktypes.Balance{
+			Address: authtypes.NewModuleAddress(stakingtypes.BondedPoolName).String(),
+			Coins:   sdk.Coins{bondCoins},
+		})
+	}
+
+	// update total supply
+	bankGenesis := banktypes.NewGenesisState(banktypes.DefaultGenesisState().Params, balances, totalSupply, []banktypes.Metadata{})
+	genesisState[banktypes.ModuleName] = app.AppCodec().MustMarshalJSON(bankGenesis)
+
+	return genesisState
+}
+
+// Setup initializes a new LiquidityApp. A Nop logger is set in LiquidityApp.
+func Setup(t *testing.T) *LiquidityApp {
+	t.Helper()
+	privVal := mock.NewPV()
+	pubKey, err := privVal.GetPubKey()
+	require.NoError(t, err)
+
+	// create validator set with single validator
+	validator := tmtypes.NewValidator(pubKey, 1)
+	valSet := tmtypes.NewValidatorSet([]*tmtypes.Validator{validator})
+
+	// generate genesis account
+	senderPrivKey := secp256k1.GenPrivKey()
+	acc := authtypes.NewBaseAccount(senderPrivKey.PubKey().Address().Bytes(), senderPrivKey.PubKey(), 0, 0)
+	balance := banktypes.Balance{
+		Address: acc.GetAddress().String(),
+		Coins:   sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, sdk.NewInt(100000000000000))),
+	}
+
+	app := SetupWithGenesisValSet(t, "", valSet, []authtypes.GenesisAccount{acc}, balance)
+
+	return app
+}
+
+// SetupWithGenesisValSet initializes a new App with a validator set and genesis accounts
+// that also act as delegators. For simplicity, each validator is bonded with a delegation
+// of one consensus engine unit in the default token of the app from first genesis
+// account. A Nop logger is set in App.
+func SetupWithGenesisValSet(t *testing.T, chainID string, valSet *tmtypes.ValidatorSet, genAccs []authtypes.GenesisAccount, balances ...banktypes.Balance) *LiquidityApp {
+	t.Helper()
+
+	app, genesisState := setup(t, true, 5)
+	genesisState = genesisStateWithValSet(t, app, genesisState, valSet, genAccs, balances...)
+
+	stateBytes, err := json.MarshalIndent(genesisState, "", " ")
+	require.NoError(t, err)
+
+	// init chain will set the validator set and initialize the genesis accounts
+	app.InitChain(
+		abci.RequestInitChain{
+			Validators:      []abci.ValidatorUpdate{},
+			ConsensusParams: DefaultConsensusParams,
+			AppStateBytes:   stateBytes,
+			ChainId:         chainID,
+		},
+	)
+
+	// commit genesis changes
+	app.Commit()
+	app.BeginBlock(abci.RequestBeginBlock{Header: tmproto.Header{
+		Height:             app.LastBlockHeight() + 1,
+		AppHash:            app.LastCommitID().Hash,
+		ValidatorsHash:     valSet.Hash(),
+		NextValidatorsHash: valSet.Hash(),
+		ChainID:            chainID,
+	}})
 
 	return app
 }
@@ -92,7 +259,7 @@ func createIncrementalAccounts(accNum int) []sdk.AccAddress {
 		buffer.WriteString("A58856F0FD53BF058B4909A21AEC019107BA6") // base address string
 
 		buffer.WriteString(numString) // adding on final two digits to make addresses unique
-		res, _ := sdk.AccAddressFromHex(buffer.String())
+		res, _ := sdk.AccAddressFromHexUnsafe(buffer.String())
 		bech := res.String()
 		addr, _ := TestAddr(buffer.String(), bech)
 
@@ -132,11 +299,11 @@ func FundAccount(app *LiquidityApp, ctx sdk.Context, addr sdk.AccAddress, amount
 
 // AddTestAddrs constructs and returns accNum amount of accounts with an
 // initial balance of accAmt in random order
-func AddTestAddrsIncremental(app *LiquidityApp, ctx sdk.Context, accNum int, accAmt sdk.Int) []sdk.AccAddress {
+func AddTestAddrsIncremental(app *LiquidityApp, ctx sdk.Context, accNum int, accAmt sdkmath.Int) []sdk.AccAddress {
 	return addTestAddrs(app, ctx, accNum, accAmt, createIncrementalAccounts)
 }
 
-func addTestAddrs(app *LiquidityApp, ctx sdk.Context, accNum int, accAmt sdk.Int, strategy GenerateAccountStrategy) []sdk.AccAddress {
+func addTestAddrs(app *LiquidityApp, ctx sdk.Context, accNum int, accAmt sdkmath.Int, strategy GenerateAccountStrategy) []sdk.AccAddress {
 	testAddrs := strategy(accNum)
 
 	initCoins := sdk.NewCoins(sdk.NewCoin(app.StakingKeeper.BondDenom(ctx), accAmt))
@@ -173,7 +340,7 @@ func SaveAccountWithFee(app *LiquidityApp, ctx sdk.Context, addr sdk.AccAddress,
 }
 
 func TestAddr(addr string, bech string) (sdk.AccAddress, error) {
-	res, err := sdk.AccAddressFromHex(addr)
+	res, err := sdk.AccAddressFromHexUnsafe(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -195,12 +362,12 @@ func TestAddr(addr string, bech string) (sdk.AccAddress, error) {
 
 // CreateTestInput returns a simapp with custom LiquidityKeeper to avoid
 // messing with the hooks.
-func CreateTestInput() (*LiquidityApp, sdk.Context) {
+func CreateTestInput(t *testing.T) (*LiquidityApp, sdk.Context) {
 	cdc := codec.NewLegacyAmino()
 	types.RegisterLegacyAminoCodec(cdc)
 	keeper.BatchLogicInvariantCheckFlag = true
 
-	app := Setup(false)
+	app := Setup(t)
 	ctx := app.BaseApp.NewContext(false, tmproto.Header{})
 
 	appCodec := app.AppCodec()
@@ -217,30 +384,30 @@ func CreateTestInput() (*LiquidityApp, sdk.Context) {
 	return app, ctx
 }
 
-func GetRandPoolAmt(r *rand.Rand, minInitDepositAmt sdk.Int) (x, y sdk.Int) {
+func GetRandPoolAmt(r *rand.Rand, minInitDepositAmt sdkmath.Int) (x, y sdkmath.Int) {
 	x = GetRandRange(r, int(minInitDepositAmt.Int64()), 100000000000000).MulRaw(int64(math.Pow10(r.Intn(10))))
 	y = GetRandRange(r, int(minInitDepositAmt.Int64()), 100000000000000).MulRaw(int64(math.Pow10(r.Intn(10))))
 	return
 }
 
-func GetRandRange(r *rand.Rand, min, max int) sdk.Int {
+func GetRandRange(r *rand.Rand, min, max int) sdkmath.Int {
 	return sdk.NewInt(int64(r.Intn(max-min) + min))
 }
 
-func GetRandomSizeOrders(denomX, denomY string, x, y sdk.Int, r *rand.Rand, sizeXToY, sizeYToX int32) (xToY, yToX []*types.MsgSwapWithinBatch) {
+func GetRandomSizeOrders(denomX, denomY string, x, y sdkmath.Int, r *rand.Rand, sizeXToY, sizeYToX int32) (xToY, yToX []*types.MsgSwapWithinBatch) {
 	randomSizeXtoY := int(r.Int31n(sizeXToY))
 	randomSizeYtoX := int(r.Int31n(sizeYToX))
 	return GetRandomOrders(denomX, denomY, x, y, r, randomSizeXtoY, randomSizeYtoX)
 }
 
-func GetRandomOrders(denomX, denomY string, x, y sdk.Int, r *rand.Rand, sizeXToY, sizeYToX int) (xToY, yToX []*types.MsgSwapWithinBatch) {
-	currentPrice := x.ToDec().Quo(y.ToDec())
+func GetRandomOrders(denomX, denomY string, x, y sdkmath.Int, r *rand.Rand, sizeXToY, sizeYToX int) (xToY, yToX []*types.MsgSwapWithinBatch) {
+	currentPrice := sdk.NewDecFromInt(x).Quo(sdk.NewDecFromInt(y))
 
 	for len(xToY) < sizeXToY {
 		orderPrice := currentPrice.Mul(sdk.NewDecFromIntWithPrec(GetRandRange(r, 991, 1009), 3))
-		orderAmt := sdk.ZeroDec()
+		var orderAmt sdk.Dec
 		if r.Intn(2) == 1 {
-			orderAmt = x.ToDec().Mul(sdk.NewDecFromIntWithPrec(GetRandRange(r, 1, 100), 4))
+			orderAmt = sdk.NewDecFromInt(x).Mul(sdk.NewDecFromIntWithPrec(GetRandRange(r, 1, 100), 4))
 		} else {
 			orderAmt = sdk.NewDecFromIntWithPrec(GetRandRange(r, 1000, 10000), 0)
 		}
@@ -258,9 +425,9 @@ func GetRandomOrders(denomX, denomY string, x, y sdk.Int, r *rand.Rand, sizeXToY
 
 	for len(yToX) < sizeYToX {
 		orderPrice := currentPrice.Mul(sdk.NewDecFromIntWithPrec(GetRandRange(r, 991, 1009), 3))
-		orderAmt := sdk.ZeroDec()
+		var orderAmt sdk.Dec
 		if r.Intn(2) == 1 {
-			orderAmt = y.ToDec().Mul(sdk.NewDecFromIntWithPrec(GetRandRange(r, 1, 100), 4))
+			orderAmt = sdk.NewDecFromInt(y).Mul(sdk.NewDecFromIntWithPrec(GetRandRange(r, 1, 100), 4))
 		} else {
 			orderAmt = sdk.NewDecFromIntWithPrec(GetRandRange(r, 1000, 10000), 0)
 		}
@@ -278,7 +445,7 @@ func GetRandomOrders(denomX, denomY string, x, y sdk.Int, r *rand.Rand, sizeXToY
 	return xToY, yToX
 }
 
-func TestCreatePool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, x, y sdk.Int, denomX, denomY string, addr sdk.AccAddress) uint64 {
+func TestCreatePool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, x, y sdkmath.Int, denomX, denomY string, addr sdk.AccAddress) uint64 {
 	deposit := sdk.NewCoins(sdk.NewCoin(denomX, x), sdk.NewCoin(denomY, y))
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 	// set accounts for creator, depositor, withdrawer, balance for deposit
@@ -309,7 +476,7 @@ func TestCreatePool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, x, y sd
 	return poolID
 }
 
-func TestDepositPool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, x, y sdk.Int, addrs []sdk.AccAddress, poolID uint64, withEndblock bool) {
+func TestDepositPool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, x, y sdkmath.Int, addrs []sdk.AccAddress, poolID uint64, withEndblock bool) {
 	pool, found := simapp.LiquidityKeeper.GetPool(ctx, poolID)
 	require.True(t, found)
 	denomX, denomY := pool.ReserveCoinDenoms[0], pool.ReserveCoinDenoms[1]
@@ -366,7 +533,7 @@ func TestDepositPool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, x, y s
 	}
 }
 
-func TestWithdrawPool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, poolCoinAmt sdk.Int, addrs []sdk.AccAddress, poolID uint64, withEndblock bool) {
+func TestWithdrawPool(t *testing.T, simapp *LiquidityApp, ctx sdk.Context, poolCoinAmt sdkmath.Int, addrs []sdk.AccAddress, poolID uint64, withEndblock bool) {
 	pool, found := simapp.LiquidityKeeper.GetPool(ctx, poolID)
 	require.True(t, found)
 	moduleAccAddress := simapp.AccountKeeper.GetModuleAddress(types.ModuleName)

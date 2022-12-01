@@ -16,7 +16,7 @@ import (
 // so is not included in the coverage.
 
 func TestMsgCreatePool(t *testing.T) {
-	simapp, ctx := createTestInput()
+	simapp, ctx := createTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -57,7 +57,7 @@ func TestMsgCreatePool(t *testing.T) {
 }
 
 func TestMsgDepositWithinBatch(t *testing.T) {
-	simapp, ctx := createTestInput()
+	simapp, ctx := createTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -112,7 +112,7 @@ func TestMsgDepositWithinBatch(t *testing.T) {
 }
 
 func TestMsgWithdrawWithinBatch(t *testing.T) {
-	simapp, ctx := createTestInput()
+	simapp, ctx := createTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -170,7 +170,7 @@ func TestMsgWithdrawWithinBatch(t *testing.T) {
 }
 
 func TestMsgGetLiquidityPoolMetadata(t *testing.T) {
-	simapp, ctx := createTestInput()
+	simapp, ctx := createTestInput(t)
 	simapp.LiquidityKeeper.SetParams(ctx, types.DefaultParams())
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
@@ -222,7 +222,7 @@ func TestMsgGetLiquidityPoolMetadata(t *testing.T) {
 }
 
 func TestMsgSwapWithinBatch(t *testing.T) {
-	simapp, ctx := app.CreateTestInput()
+	simapp, ctx := app.CreateTestInput(t)
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
 	depositCoins := sdk.NewCoins(sdk.NewCoin(DenomX, sdk.NewInt(1_000_000_000)), sdk.NewCoin(DenomY, sdk.NewInt(1_000_000_000)))

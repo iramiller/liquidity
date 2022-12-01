@@ -12,8 +12,8 @@ import (
 
 // createTestInput Returns a simapp with custom LiquidityKeeper
 // to avoid messing with the hooks.
-func createTestInput() (*app.LiquidityApp, sdk.Context) {
-	return app.CreateTestInput()
+func createTestInput(t *testing.T) (*app.LiquidityApp, sdk.Context) {
+	return app.CreateTestInput(t)
 }
 
 func createLiquidity(t *testing.T, ctx sdk.Context, simapp *app.LiquidityApp) (
@@ -77,8 +77,8 @@ func createLiquidity(t *testing.T, ctx sdk.Context, simapp *app.LiquidityApp) (
 	return addrs, pools, batches, depositMsgs, withdrawMsgs
 }
 
-func createTestPool(X, Y sdk.Coin) (*app.LiquidityApp, sdk.Context, types.Pool, sdk.AccAddress, error) {
-	simapp, ctx := createTestInput()
+func createTestPool(t *testing.T, X, Y sdk.Coin) (*app.LiquidityApp, sdk.Context, types.Pool, sdk.AccAddress, error) {
+	simapp, ctx := createTestInput(t)
 	params := simapp.LiquidityKeeper.GetParams(ctx)
 
 	depositCoins := sdk.NewCoins(X, Y)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	sdksim "github.com/cosmos/cosmos-sdk/simapp"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -38,9 +39,16 @@ import (
 )
 
 func TestSimAppExportAndBlockedAddrs(t *testing.T) {
-	encCfg := MakeEncodingConfig()
-	db := dbm.NewMemDB()
-	app := NewLiquidityApp(log.NewTMLogger(log.NewSyncWriter(os.Stdout)), db, nil, true, map[int64]bool{}, DefaultNodeHome, 0, encCfg, EmptyAppOptions{})
+	opts := SetupOptions{
+		Logger:             log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
+		DB:                 dbm.NewMemDB(),
+		InvCheckPeriod:     0,
+		HomePath:           t.TempDir(),
+		SkipUpgradeHeights: map[int64]bool{},
+		EncConfig:          MakeEncodingConfig(),
+		AppOpts:            sdksim.EmptyAppOptions{},
+	}
+	app := NewAppWithCustomOptions(t, false, opts)
 
 	for acc := range maccPerms {
 		require.True(
@@ -50,23 +58,21 @@ func TestSimAppExportAndBlockedAddrs(t *testing.T) {
 		)
 	}
 
-	genesisState := NewDefaultGenesisState()
-	stateBytes, err := json.MarshalIndent(genesisState, "", "  ")
-	require.NoError(t, err)
-
-	// Initialize the chain
-	app.InitChain(
-		abci.RequestInitChain{
-			Validators:    []abci.ValidatorUpdate{},
-			AppStateBytes: stateBytes,
-		},
-	)
 	app.Commit()
 
 	// Making a new app object with the db, so that initchain hasn't been called
-	app2 := NewLiquidityApp(log.NewTMLogger(log.NewSyncWriter(os.Stdout)), db, nil, true, map[int64]bool{}, DefaultNodeHome, 0, encCfg, EmptyAppOptions{})
-	_, err = app2.ExportAppStateAndValidators(false, []string{})
-	require.NoError(t, err, "ExportAppStateAndValidators should not have an error")
+	app2 := NewLiquidityApp(log.NewTMLogger(log.NewSyncWriter(os.Stdout)), opts.DB, nil, true,
+		map[int64]bool{}, opts.HomePath, 0, opts.EncConfig, sdksim.EmptyAppOptions{})
+	var err error
+	require.NotPanics(t, func() {
+		_, err = app2.ExportAppStateAndValidators(false, []string{})
+	}, "exporting app state at current height")
+	require.NoError(t, err, "ExportAppStateAndValidators at current height")
+
+	require.NotPanics(t, func() {
+		_, err = app2.ExportAppStateAndValidators(true, []string{})
+	}, "exporting app state at zero height")
+	require.NoError(t, err, "ExportAppStateAndValidators at zero height")
 }
 
 func TestGetMaccPerms(t *testing.T) {
@@ -244,21 +250,8 @@ func TestInitGenesisOnMigration(t *testing.T) {
 }
 
 func TestUpgradeStateOnGenesis(t *testing.T) {
-	encCfg := MakeEncodingConfig()
-	db := dbm.NewMemDB()
-	app := NewLiquidityApp(log.NewTMLogger(log.NewSyncWriter(os.Stdout)), db, nil, true, map[int64]bool{}, DefaultNodeHome, 0, encCfg, EmptyAppOptions{})
-	genesisState := NewDefaultGenesisState()
-	stateBytes, err := json.MarshalIndent(genesisState, "", "  ")
-	require.NoError(t, err)
 
-	// Initialize the chain
-	app.InitChain(
-		abci.RequestInitChain{
-			Validators:    []abci.ValidatorUpdate{},
-			AppStateBytes: stateBytes,
-		},
-	)
-
+	app := Setup(t)
 	// make sure the upgrade keeper has version map in state
 	ctx := app.NewContext(false, tmproto.Header{})
 	vm := app.UpgradeKeeper.GetModuleVersionMap(ctx)

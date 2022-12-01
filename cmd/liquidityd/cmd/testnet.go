@@ -202,7 +202,7 @@ func InitTestnet(
 		memo := fmt.Sprintf("%s@%s:26656", nodeIDs[i], ip)
 		genFiles = append(genFiles, nodeConfig.GenesisFile())
 
-		kb, err := keyring.New(sdk.KeyringServiceName(), keyringBackend, clientDir, inBuf)
+		kb, err := keyring.New(sdk.KeyringServiceName(), keyringBackend, clientDir, inBuf, clientCtx.Codec)
 		if err != nil {
 			return err
 		}
@@ -419,10 +419,9 @@ func calculateIP(ip string, i int) (string, error) {
 }
 
 func writeFile(name string, dir string, contents []byte) error {
-	writePath := filepath.Join(dir)
-	file := filepath.Join(writePath, name)
+	file := filepath.Join(dir, name)
 
-	err := tmos.EnsureDir(writePath, 0755)
+	err := tmos.EnsureDir(dir, 0755)
 	if err != nil {
 		return err
 	}

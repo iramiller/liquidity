@@ -20,7 +20,7 @@ import (
 
 // TestWeightedOperations tests the weights of the operations.
 func TestWeightedOperations(t *testing.T) {
-	app, ctx := createTestApp(false)
+	app, ctx := createTestApp(t, false)
 
 	ctx.WithChainID("test-chain")
 
@@ -58,7 +58,7 @@ func TestWeightedOperations(t *testing.T) {
 // TestSimulateMsgCreatePool tests the normal scenario of a valid message of type TypeMsgCreatePool.
 // Abnormal scenarios, where the message are created by an errors are not tested here.
 func TestSimulateMsgCreatePool(t *testing.T) {
-	app, ctx := createTestApp(false)
+	app, ctx := createTestApp(t, false)
 
 	// setup a single account
 	s := rand.NewSource(1)
@@ -93,7 +93,7 @@ func TestSimulateMsgCreatePool(t *testing.T) {
 // TestSimulateMsgDepositWithinBatch tests the normal scenario of a valid message of type TypeMsgDepositWithinBatch.
 // Abnormal scenarios, where the message are created by an errors are not tested here.
 func TestSimulateMsgDepositWithinBatch(t *testing.T) {
-	app, ctx := createTestApp(false)
+	app, ctx := createTestApp(t, false)
 
 	// setup accounts
 	s := rand.NewSource(1)
@@ -124,7 +124,7 @@ func TestSimulateMsgDepositWithinBatch(t *testing.T) {
 // TestSimulateMsgWithdrawWithinBatch tests the normal scenario of a valid message of type TypeMsgWithdrawWithinBatch.
 // Abnormal scenarios, where the message are created by an errors are not tested here.
 func TestSimulateMsgWithdrawWithinBatch(t *testing.T) {
-	app, ctx := createTestApp(false)
+	app, ctx := createTestApp(t, false)
 
 	// setup accounts
 	s := rand.NewSource(1)
@@ -155,7 +155,7 @@ func TestSimulateMsgWithdrawWithinBatch(t *testing.T) {
 // TestSimulateMsgSwapWithinBatch tests the normal scenario of a valid message of type TypeMsgSwapWithinBatch.
 // Abnormal scenarios, where the message are created by an errors are not tested here.
 func TestSimulateMsgSwapWithinBatch(t *testing.T) {
-	app, ctx := createTestApp(false)
+	app, ctx := createTestApp(t, false)
 
 	// setup a single account
 	s := rand.NewSource(1)
@@ -184,8 +184,8 @@ func TestSimulateMsgSwapWithinBatch(t *testing.T) {
 	require.Len(t, futureOperations, 0)
 }
 
-func createTestApp(isCheckTx bool) (*lapp.LiquidityApp, sdk.Context) {
-	app := lapp.Setup(false)
+func createTestApp(t *testing.T, isCheckTx bool) (*lapp.LiquidityApp, sdk.Context) {
+	app := lapp.Setup(t)
 
 	ctx := app.BaseApp.NewContext(isCheckTx, tmproto.Header{})
 	app.MintKeeper.SetParams(ctx, minttypes.DefaultParams())

@@ -54,7 +54,7 @@ func getQueriedLiquidityPools(t *testing.T, ctx sdk.Context, cdc *codec.LegacyAm
 func TestNewQuerier(t *testing.T) {
 	cdc := codec.NewLegacyAmino()
 	types.RegisterLegacyAminoCodec(cdc)
-	simapp := app.Setup(false)
+	simapp := app.Setup(t)
 	ctx := simapp.BaseApp.NewContext(false, tmproto.Header{})
 	X := sdk.NewInt(1000000000)
 	Y := sdk.NewInt(1000000000)
@@ -87,7 +87,7 @@ func TestQueries(t *testing.T) {
 	cdc := codec.NewLegacyAmino()
 	types.RegisterLegacyAminoCodec(cdc)
 
-	simapp := app.Setup(false)
+	simapp := app.Setup(t)
 	ctx := simapp.BaseApp.NewContext(false, tmproto.Header{})
 
 	// define test denom X, Y for Liquidity Pool
